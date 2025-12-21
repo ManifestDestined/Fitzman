@@ -237,12 +237,14 @@ class Game:
             if d:
                 self.engine.movingObjectPacman.dirNext = d
 
-    def _wrap_dist(self, a: int, b: int, period: int) -> int:
-        """Shortest distance on a wraparound axis (handles -3 / 27*4+3 teleports)."""
+    def _wrap_dist_x(self, a: int, b: int, period: int) -> int:
         a %= period
         b %= period
         d = abs(a - b)
         return min(d, period - d)
+    
+    def _dist_y(self, a: int, b: int) -> int:
+        return abs(a - b)
 
     def _check_ghost_collision(
         self,
@@ -270,8 +272,9 @@ class Game:
             # 1) Overlap check (match field.py "benign determine" but more reliable)
             # field.py uses (m-3 < x < m+3) so distance < 3 (strict).
             # We'll make it a hair more forgiving to prevent edge-case misses.
-            dx = self._wrap_dist(px, gx, W_ABS)
-            dy = self._wrap_dist(py, gy, H_ABS)
+            dx = self._wrap_dist_x(px, gx, W_ABS)
+            dy = self._dist_y(py, gy)
+
             if dx <= 3 and dy <= 3:
                 return self._lose_life()
 
@@ -329,45 +332,40 @@ class Game:
 
 
     def update(self, dt: float) -> None:
-    if self.game_over or self.state != "PLAY":
-        return
-
-    self._anim_t += dt
-
-    # Accumulate real time, step the engine at a fixed rate
-    self.engine_accum += dt
-    steps = 0
-    max_steps = 5  # 3 is a bit tight on slow frames
-
-    while self.engine_accum >= self.engine_dt and steps < max_steps:
-        pac_prev = tuple(self.engine.movingObjectPacman.coordinateAbs)
-        ghosts_prev = [tuple(g.coordinateAbs) for g in self.engine.movingObjectGhosts]
-
-        self.engine.loopFunction()
-
-        # collisions every tick (not every frame)
-        if self._check_ghost_collision(pac_prev, ghosts_prev):
+        if self.game_over or self.state != "PLAY":
             return
-
-        # eat pellets only on-grid to avoid weird early eats
-        ax, ay = self.engine.movingObjectPacman.coordinateAbs
-        if ax % 4 == 0 and ay % 4 == 0:
-            rx, ry = self.engine.movingObjectPacman.coordinateRel
-            if 0 <= rx < GRID_W and 0 <= ry < GRID_H:
-                obj = self.engine.levelObjects[rx][ry]
-                if obj.name == "pellet" and not obj.isDestroyed:
-                    obj.isDestroyed = True
-                    obj.name = "empty"
-                    self.engine.levelPelletRemaining -= 1
-                    self.score += 10
-
-        # level clear
-        if self.engine.levelPelletRemaining <= 0:
-            self._advance_level()
-            return
-
-        self.engine_accum -= self.engine_dt
-        steps += 1
+    
+        self._anim_t += dt
+    
+        # Accumulate real time, step the engine at a fixed rate
+        self.engine_accum += dt
+        steps = 0
+        max_steps = 5  # 3 is a bit tight on slow frames
+    
+        while self.engine_accum >= self.engine_dt and steps < max_steps:
+            pac_prev = tuple(self.engine.movingObjectPacman.coordinateAbs)
+            ghosts_prev = [tuple(g.coordinateAbs) for g in self.engine.movingObjectGhosts]
+    
+            self.engine.loopFunction()
+    
+            # collisions every tick (not every frame)
+            if self._check_ghost_collision(pac_prev, ghosts_prev):
+                return
+    
+            # eat pellets only on-grid to avoid weird early eats
+            ax, ay = self.engine.movingObjectPacman.coordinateAbs
+            if ax % 4 == 0 and ay % 4 == 0:
+                rx, ry = self.engine.movingObjectPacman.coordinateRel
+                if 0 <= rx < GRID_W and 0 <= ry < GRID_H:
+                    obj = self.engine.levelObjects[rx][ry]
+                    if obj.name == "pellet" and not obj.isDestroyed:
+                        obj.isDestroyed = True
+                        obj.name = "empty"
+                        self.engine.levelPelletRemaining -= 1
+                        self.score += 10
+    
+            # level clear
+            if self.engine.levelPelletRemaining <= 0:
 
     def _advance_level(self) -> None:
         self.level += 1
@@ -473,5 +471,6 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
