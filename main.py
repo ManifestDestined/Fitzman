@@ -329,54 +329,57 @@ class Game:
 
 
     def update(self, dt: float) -> None:
-        if self.game_over:
-            return
-        
-        if self.state != "PLAY":
-            return
+    if self.game_over or self.state != "PLAY":
+        return
 
-        self._anim_t += dt
+    self._anim_t += dt
 
-        # Accumulate real time, step the engine at a fixed rate
-        self.engine_accum += dt
-        steps = 0
-        max_steps = 3  # prevents "spiral of death" on lag spikes
+    # Accumulate real time, step the engine at a fixed rate
+    self.engine_accum += dt
+    steps = 0
+    max_steps = 5  # 3 is a bit tight on slow frames
 
-               # (also strongly recommended)
-        if self.state != "PLAY":
-            return
-
+    while self.engine_accum >= self.engine_dt and steps < max_steps:
         pac_prev = tuple(self.engine.movingObjectPacman.coordinateAbs)
         ghosts_prev = [tuple(g.coordinateAbs) for g in self.engine.movingObjectGhosts]
 
         self.engine.loopFunction()
 
+        # collisions every tick (not every frame)
         if self._check_ghost_collision(pac_prev, ghosts_prev):
             return
 
-            self.engine_accum -= self.engine_dt
-            steps += 1
+        # eat pellets only on-grid to avoid weird early eats
+        ax, ay = self.engine.movingObjectPacman.coordinateAbs
+        if ax % 4 == 0 and ay % 4 == 0:
+            rx, ry = self.engine.movingObjectPacman.coordinateRel
+            if 0 <= rx < GRID_W and 0 <= ry < GRID_H:
+                obj = self.engine.levelObjects[rx][ry]
+                if obj.name == "pellet" and not obj.isDestroyed:
+                    obj.isDestroyed = True
+                    obj.name = "empty"
+                    self.engine.levelPelletRemaining -= 1
+                    self.score += 10
 
-        # ---- Pellet scoring fix (minimal + correct) ----
-        rx, ry = self.engine.movingObjectPacman.coordinateRel
-        if 0 <= rx < GRID_W and 0 <= ry < GRID_H:
-            obj = self.engine.levelObjects[rx][ry]
-            # field.encounterFixed() ignores isDestroyed, so we must stop the tile being a pellet.
-            if obj.name == "pellet" and not obj.isDestroyed:
-                obj.isDestroyed = True
-                obj.name = "empty"  # critical: prevents re-scoring every frame
-                self.engine.levelPelletRemaining -= 1
-                self.score += 10
-
-        # Level clear
+        # level clear
         if self.engine.levelPelletRemaining <= 0:
-            self.level += 1
-            next_path = os.path.join("resource", f"level{self.level}.txt")
-            if not os.path.exists(next_path):
-                self.level = 1
-            self.engine = field.GameEngine()
-            self.engine.levelGenerate(self.level)
-            self.engine.movingObjectPacman.isActive = True
+            self._advance_level()
+            return
+
+        self.engine_accum -= self.engine_dt
+        steps += 1
+
+    def _advance_level(self) -> None:
+        self.level += 1
+        next_path = os.path.join("resource", f"level{self.level}.txt")
+        if not os.path.exists(next_path):
+            self.level = 1
+        self.engine = field.GameEngine()
+        self.engine.levelPelletRemaining = 0
+        self.engine.levelGenerate(self.level)
+        self.engine.movingObjectPacman.isActive = True
+        self.engine_accum = 0.0
+
 
     def reset_game(self) -> None:
         self.score = 0
@@ -470,4 +473,5 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
