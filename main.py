@@ -133,7 +133,7 @@ class Game:
         self.engine = field.GameEngine()
         self.engine.levelGenerate(self.level)
         self.engine.movingObjectPacman.isActive = True
-        self.engine_hz = 13        
+        self.engine_hz = 10        
         self.engine_dt = 1.0 / self.engine_hz
         self.engine_accum = 0.0
 
@@ -471,6 +471,7 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
 
 
